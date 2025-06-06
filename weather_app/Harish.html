@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Weather App</title>
+<style>
+  /* Same glassmorphic styles and slight glow */
+  body {
+    background: linear-gradient(135deg, #121212, #1e1e1e);
+    color: #e0e0e0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
+    min-height: 100vh;
+  }
+
+  h1 {
+    margin-bottom: 1rem;
+    text-align: center;
+  }
+
+  /* New container to align search and weather boxes */
+  .app-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* center horizontally */
+    gap: 2rem; /* space between boxes */
+    width: 100%;
+    max-width: 360px; /* consistent max width */
+  }
+
+  .search-container,
+  .weather {
+    width: 100%; /* full width inside container */
+    max-width: 360px; /* consistent width */
+    box-sizing: border-box;
+  }
+
+  .search-container {
+    position: relative;
+    margin-bottom: 0; /* remove original margin */
+  }
+
+  input[type="text"] {
+    width: 100%;
+    padding: 0.8rem 1rem;
+    font-size: 1rem;
+    border: none;
+    border-radius: 12px;
+    background: rgba(255 255 255 / 0.07);
+    color: #e0e0e0;
+    outline: none;
+    box-shadow:
+      0 0 6px rgba(255, 255, 255, 0.08);
+    transition: box-shadow 0.3s ease;
+  }
+
+  input[type="text"]:focus {
+    box-shadow:
+      0 0 10px rgba(255, 255, 255, 0.3);
+  }
+
+  button {
+    margin-top: 0.5rem;
+    width: 100%;
+    padding: 0.8rem 1rem;
+    font-size: 1rem;
+    color: #e0e0e0;
+    background: linear-gradient(135deg, #00b4db, #0083b0);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+  }
+
+  button:hover {
+    background: linear-gradient(135deg, #0083b0, #00b4db);
+  }
+
+  .weather {
+    background: linear-gradient(
+      145deg,
+      rgba(255 255 255 / 0.07),
+      rgba(255 255 255 / 0.12)
+    );
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.1);
+    padding: 2rem;
+    text-align: center;
+    position: relative;
+    min-height: 200px;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  .weather.visible {
+    opacity: 1;
+  }
+
+  .temp {
+    font-size: 3rem;
+    font-weight: 700;
+    margin: 0.5rem 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  .description {
+    font-size: 1.2rem;
+    font-style: italic;
+    text-transform: capitalize;
+    margin-bottom: 1rem;
+  }
+
+  .details {
+    margin-top: 1rem;
+    text-align: left;
+  }
+
+  .detail-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.3rem 0;
+  }
+
+  .detail-item svg {
+    fill: #00b4db;
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Autocomplete list */
+  #autocomplete-list {
+    position: absolute;
+    top: 110%;
+    left: 0;
+    right: 0;
+    max-height: 180px;
+    overflow-y: auto;
+    background: linear-gradient(
+      145deg,
+      rgba(255 255 255 / 0.07),
+      rgba(255 255 255 / 0.12)
+    );
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.15);
+    z-index: 1000;
+    color: #e0e0e0;
+  }
+
+  #autocomplete-list div {
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s ease;
+  }
+
+  #autocomplete-list div:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Scrollbar for autocomplete */
+  #autocomplete-list::-webkit-scrollbar {
+    width: 8px;
+  }
+  #autocomplete-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+  }
+  #autocomplete-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  @media (max-width: 420px) {
+    .weather, .search-container {
+      max-width: 95vw;
+    }
+  }
+</style>
+</head>
+<body>
+
+<h1>Weather App</h1>
+
+<div class="app-container">
+  <div class="search-container">
+    <input
+      type="text"
+      id="cityInput"
+      placeholder="Enter city name"
+      autocomplete="off"
+    />
+    <div id="autocomplete-list"></div>
+    <button id="getWeatherBtn">Get Weather</button>
+  </div>
+
+  <div class="weather" id="weatherInfo"></div>
+</div>
+
+<script>
+  const apiKey = "e1332584af4a7a7f3090980928b49ae4";
+
+  const cityInput = document.getElementById("cityInput");
+  const getWeatherBtn = document.getElementById("getWeatherBtn");
+  const weatherInfo = document.getElementById("weatherInfo");
+  const autocompleteList = document.getElementById("autocomplete-list");
+
+  // Show autocomplete suggestions from OpenWeatherMap Geocoding API
+  async function showAutocomplete(value) {
+    autocompleteList.innerHTML = "";
+    if (!value) {
+      autocompleteList.style.display = "none";
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(value)}&limit=5&appid=${apiKey}`
+      );
+      const cities = await response.json();
+
+      if (!Array.isArray(cities) || cities.length === 0) {
+        autocompleteList.style.display = "none";
+        return;
+      }
+
+      cities.forEach(city => {
+        const div = document.createElement("div");
+        let displayName = city.name;
+        if (city.state) displayName += `, ${city.state}`;
+        if (city.country) displayName += `, ${city.country}`;
+        div.textContent = displayName;
+        div.addEventListener("click", () => {
+          cityInput.value = displayName;
+          autocompleteList.innerHTML = "";
+          autocompleteList.style.display = "none";
+          fetchWeatherByCoords(city.lat, city.lon);
+        });
+        autocompleteList.appendChild(div);
+      });
+
+      autocompleteList.style.display = "block";
+    } catch (error) {
+      console.error("Autocomplete fetch error:", error);
+      autocompleteList.style.display = "none";
+    }
+  }
+
+  cityInput.addEventListener("input", () => {
+    const value = cityInput.value.trim();
+    if (value.length > 0) {
+      showAutocomplete(value);
+    } else {
+      autocompleteList.style.display = "none";
+    }
+  });
+
+  // Hide autocomplete on outside click
+  document.addEventListener("click", (e) => {
+    if (!autocompleteList.contains(e.target) && e.target !== cityInput) {
+      autocompleteList.style.display = "none";
+    }
+  });
+
+  cityInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      autocompleteList.style.display = "none";
+      fetchWeather(cityInput.value.trim());
+    }
+  });
+
+  function showMessage(msg) {
+    weatherInfo.classList.remove("visible");
+    weatherInfo.innerHTML = `<p>${msg}</p>`;
+    setTimeout(() => {
+      weatherInfo.classList.add("visible");
+    }, 50);
+  }
+
+  function showLoading() {
+    weatherInfo.classList.add("loading");
+  }
+
+  function hideLoading() {
+    weatherInfo.classList.remove("loading");
+  }
+
+  async function fetchWeather(city) {
+    if (!city) {
+      showMessage("Please enter a city name.");
+      return;
+    }
+    showMessage("Loading weather data...");
+    showLoading();
+    try {
+      const response = await fetch(
+        `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${apiKey}&units=metric`
+      );
+      const data = await response.json();
+      if (data.cod !== 200) {
+        showMessage(data.message || "City not found.");
+        hideLoading();
+        return;
+      }
+      hideLoading();
+      renderWeather(data);
+    } catch (error) {
+      hideLoading();
+      showMessage("Failed to fetch data. Try again later.");
+      console.error(error);
+    }
+  }
+
+  async function fetchWeatherByCoords(lat, lon) {
+    showMessage("Loading weather for your location...");
+    showLoading();
+    try {
+      const response = await fetch(
+        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`
+      );
+      const data = await response.json();
+      if (data.cod !== 200) {
+        showMessage("Failed to fetch location weather. Enter city manually.");
+        hideLoading();
+        return;
+      }
+      hideLoading();
+      renderWeather(data);
+    } catch (error) {
+      hideLoading();
+      showMessage("Failed to fetch location weather. Enter city manually.");
+      console.error(error);
+    }
+  }
+
+  function renderWeatherIcon(mainWeather) {
+    const iconContainer = document.createElement("div");
+    iconContainer.className = "weather-icon";
+
+    switch (mainWeather.toLowerCase()) {
+      case "clear":
+        iconContainer.innerHTML = `<div class="sun"></div>`;
+        break;
+      case "clouds":
+        iconContainer.innerHTML = `<div class="cloud"></div>`;
+        break;
+      case "rain":
+      case "drizzle":
+        iconContainer.innerHTML = `<div class="cloud"></div><div class="rain"><div class="raindrop"></div><div class="raindrop"></div><div class="raindrop"></div></div>`;
+        break;
+      case "thunderstorm":
+        iconContainer.innerHTML = `<div class="cloud"></div><div class="rain"><div class="raindrop"></div><div class="raindrop"></div></div>`;
+        break;
+      case "snow":
+        iconContainer.innerHTML = `<div class="cloud"></div><div class="rain"></div>`; 
+        break;
+      case "mist":
+      case "haze":
+      case "fog":
+        iconContainer.innerHTML = `<div class="wind"></div>`;
+        break;
+      default:
+        iconContainer.innerHTML = `<div class="sun"></div>`;
+    }
+    return iconContainer;
+  }
+
+  function renderWeather(data) {
+    const {
+      name,
+      sys: { country },
+      weather,
+      main: { temp, humidity, pressure, feels_like },
+      wind: { speed }
+    } = data;
+
+    const mainWeather = weather[0].main;
+    const description = weather[0].description;
+
+    weatherInfo.innerHTML = '';
+
+    const cityHeading = document.createElement('h2');
+    cityHeading.textContent = `${name}, ${country}`;
+
+    const descPara = document.createElement('p');
+    descPara.className = 'description';
+    descPara.textContent = description;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.className = 'temp';
+    tempDiv.textContent = `${Math.round(temp)}°C`;
+
+    const iconEl = renderWeatherIcon(mainWeather);
+    tempDiv.appendChild(iconEl);
+
+    const detailsDiv = document.createElement('div');
+    detailsDiv.className = 'details';
+
+    const icons = {
+      humidity: `<svg viewBox="0 0 24 24"><path d="M12 3C7 8 5 12 5 15a7 7 0 0 0 14 0c0-3-2-7-7-12z"/></svg>`,
+      pressure: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="white" stroke-width="2" fill="none"/><path d="M12 6v6l4 2"/></svg>`,
+      feels_like: `<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0 0 20"/></svg>`,
+      wind: `<svg viewBox="0 0 24 24"><path d="M4 12h16M4 16h10"/></svg>`
+    };
+
+    const details = [
+      { label: "Humidity", value: `${humidity}%`, icon: icons.humidity },
+      { label: "Pressure", value: `${pressure} hPa`, icon: icons.pressure },
+      { label: "Feels Like", value: `${Math.round(feels_like)}°C`, icon: icons.feels_like },
+      { label: "Wind Speed", value: `${speed} m/s`, icon: icons.wind },
+    ];
+
+    details.forEach(({ label, value, icon }) => {
+      const detailItem = document.createElement('div');
+      detailItem.className = 'detail-item';
+      detailItem.innerHTML = icon + `<span>${label}: ${value}</span>`;
+      detailsDiv.appendChild(detailItem);
+    });
+
+    weatherInfo.appendChild(cityHeading);
+    weatherInfo.appendChild(descPara);
+    weatherInfo.appendChild(tempDiv);
+    weatherInfo.appendChild(detailsDiv);
+
+    weatherInfo.classList.add("visible");
+  }
+
+  // Try to get user's location on load but silently fail (no alert)
+  window.onload = () => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          fetchWeatherByCoords(latitude, longitude);
+        },
+        (err) => {
+          // Just silently fail or optionally show a small message in weather box
+          showMessage("Enter a city name to get weather info.");
+        },
+        { timeout: 10000 }
+      );
+    } else {
+      showMessage("Geolocation not supported. Enter city manually.");
+    }
+  };
+
+  getWeatherBtn.addEventListener("click", () => {
+    fetchWeather(cityInput.value.trim());
+  });
+</script>
+
+</body>
+</html>
